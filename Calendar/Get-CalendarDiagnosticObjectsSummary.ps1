@@ -30,8 +30,25 @@ param (
     [string]$Subject,
 
     [Parameter(Mandatory, ParameterSetName = 'MeetingID', Position = 1)]
-    [string]$MeetingID
+    [string]$MeetingID,
+
+    [Parameter(Mandatory = $false)]
+    [Bool]$ExportToExcel = $false
 )
+
+# ===================================================================================================
+# Support for updating the script
+# ===================================================================================================
+$BuildVersion = ""
+
+. $PSScriptRoot\..\Shared\ScriptUpdateFunctions\Test-ScriptVersion.ps1
+
+if (Test-ScriptVersion -AutoUpdate -Confirm:$false) {
+    # Update was downloaded, so stop here.
+    Write-Host "Script was updated. Please rerun the command."  -ForegroundColor Yellow
+    return
+}
+Write-Verbose "Script Versions: $BuildVersion"
 
 # ===================================================================================================
 # Constants to support the script
@@ -621,6 +638,113 @@ function MapSharedFolder {
 }
 
 # ===================================================================================================
+# Export to Excel Functions
+# ===================================================================================================
+
+function Read-JsonFile {
+    param(
+        [string]$FilePath
+    )
+
+    $jsonContent = Get-Content -Path $FilePath -Raw
+    return $jsonContent | ConvertFrom-Json
+}
+
+# Function to write-host all objects in the array
+function Write-HostAllObjects {
+    param(
+        [object]$JsonObject
+    )
+
+    foreach ($object in $JsonObject) {
+        Write-Host "Object:"
+        foreach ($property in $object.PSObject.Properties) {
+            Write-Host "  $($property.Name): $($property.Value)"
+        }
+        Write-Host ""
+    }
+}
+
+function Get-ExcelColumnRange {
+    param (
+        $table,
+        [string]$columnName
+    )
+
+    # Get the column index by the column name
+    $columnIndex = $table.ListColumns[$columnName].Index
+
+    # Get the range of the entire column
+    $columnRange = $table.ListColumns[$columnIndex].DataBodyRange
+
+    return $columnRange
+}
+
+function FindClosestNamedColor {
+    param (
+        [string]$hexColor
+    )
+
+    # Define the list of named colors
+    $namedColors = [System.Drawing.KnownColor]::GetValues([System.Drawing.KnownColor]) | ForEach-Object {
+        [System.Drawing.Color]::FromKnownColor($_)
+    }
+
+    # Convert hexadecimal to Color object
+    $inputColor = [System.Drawing.Color]::FromArgb([System.Convert]::ToInt32($hexColor.Substring(1), 16))
+
+    # Initialize variables for closest color and distance
+    $closestColor = $namedColors[0]
+    #$closestDistance = [math]::sqrt(3 * 255^2)  # Initialize to maximum possible distance
+    $closestDistance = [math]::sqrt(3 * (255*255))
+
+    # Iterate through named colors
+    foreach ($color in $namedColors) {
+        # Calculate Euclidean distance
+        $distance = [math]::sqrt(
+            ($color.R - $inputColor.R) * ($color.R - $inputColor.R) +
+            ($color.G - $inputColor.G) * ($color.G - $inputColor.G) +
+            ($color.B - $inputColor.B) * ($color.B - $inputColor.B)
+        )
+
+        # Update closest color if needed
+        if ($distance -lt $closestDistance) {
+            $closestDistance = $distance
+            $closestColor = $color
+        }
+    }
+
+    return $closestColor
+}
+
+function Format-ExcelColumn {
+    param(
+        $Worksheet,
+        [string]$ColumnName,
+        [string[]]$Properties
+    )
+
+    # Find the column index by matching the column name
+    $columnIndex = $Worksheet | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq $ColumnName } | Select-Object -ExpandProperty Definition | ForEach-Object { $_ -replace '^.*\s(\d+)>$', '$1' }
+
+    Write-Host "column Number $columnIndex"
+
+    # Check if the column index was found
+    if ($null -ne $columnIndex) {
+        # Format the entire column
+        $Properties | ForEach-Object {
+            switch ($_) {
+                'Bold' { $Worksheet | Format-ExcelTable -Bold -ColumnNumber $columnIndex }
+                'FontSize18' { $Worksheet | Format-ExcelTable -FontSize 18 -ColumnNumber $columnIndex }
+                # Add more properties and corresponding actions as needed
+            }
+        }
+    } else {
+        Write-Host "Column '$ColumnName' not found."
+    }
+}
+
+# ===================================================================================================
 # Build CSV to output
 # ===================================================================================================
 <#
@@ -628,12 +752,12 @@ function MapSharedFolder {
 Builds the CSV output from the Calendar Diagnostic Objects
 #>
 function BuildCSV {
-    Write-Output "Starting to Process Calendar Logs..."
+    Write-Host "Starting to Process Calendar Logs..."
     $GCDOResults = @();
     $IsFromSharedCalendar = @();
     $IsIgnorable = @();
     $script:MailboxList = @{};
-    Write-Output "Creating Map of Mailboxes to CN's..."
+    Write-Host "Creating Map of Mailboxes to CN's..."
     CreateExternalMasterIDMap;
 
     $ThisMeetingID = $script:GCDO.CleanGlobalObjectId | Select-Object -Unique;
@@ -641,7 +765,7 @@ function BuildCSV {
 
     ConvertCNtoSMTP;
 
-    Write-Output "Making Calendar Logs more readable..."
+    Write-Host "Making Calendar Logs more readable..."
     $Index = 0;
     foreach ($CalLog in $script:GCDO) {
         $CalLogACP = $CalLog.AppointmentCounterProposal.ToString();
@@ -736,16 +860,108 @@ function BuildCSV {
     }
     $script:Results = $GCDOResults;
 
+    # ---------------------
     # Automation won't have access to this file - will add code in next version to save contents to a variable
     #$Filename = "$($Results[0].ReceivedBy)_$ShortMeetingID.csv";
     $Filename = "$($Identity)_$ShortMeetingID.csv";
     $GCDOResults | Export-Csv -Path $Filename -NoTypeInformation
-    Write-Output "Calendar Logs for $Identity have been saved to $Filename."
+    Write-Host "Calendar Logs for $Identity have been saved to $Filename."
     $GCDOResults | Export-Csv -Path $Filename -NoTypeInformation -Encoding UTF8
 
     $MeetingTimeLine = $Results | Where-Object { $_.IsIgnorable -eq "False" } ;
-    Write-Output "`n`n`nThis is the meetingID $ThisMeetingID`nThis is Short MeetingID $ShortMeetingID"
-    Write-Output "Found $($script:GCDO.count) Log entries, Only $($MeetingTimeLine.count) entries will be analyzed.";
+    Write-Host "`n`n`nThis is the meetingID $ThisMeetingID`nThis is Short MeetingID $ShortMeetingID"
+    Write-Host "Found $($script:GCDO.count) Log entries, Only $($MeetingTimeLine.count) entries will be analyzed.";
+    # ---------------------
+
+    if ($ExportToExcel) {
+
+        #Read JSON file from the Excel Addin
+        $jsonFile = Read-JsonFile -FilePath ".\EXOCDLconfig.json"
+
+        # Write-Host $jsonFile
+        # Write-Host $jsonFile.columns
+        # Write-Host $jsonFile.conditionalFormats
+        # Write-Host $jsonFile.filterDefinitions
+
+        $path = "C:\Temp\ExcelCDL.xlsx"
+        Write-Host $path
+
+        Remove-Item -Path $path -Force -ErrorAction SilentlyContinue
+        $excel = Open-ExcelPackage $path -Create -KillExcel
+
+        $ExcelParams =
+        @{
+            #Path    = $env:TEMP + '\ExcelCDL.xlsx'
+            Path          = $path
+            #Show    = $true
+            FreezeTopRow  = $true
+            BoldTopRow    = $true
+            Verbose       = $true
+            TableStyle    = "Medium2"
+            WorksheetName = $Identity
+            TableName     = $Identity
+            #PassThru = $true #ONLY THE LAST ONE CAN BE USED WITH PASSTHRU
+        }
+
+       # Write-Host @ExcelParams
+
+        Write-Host "Exporting to Excel"
+        $xls = $script:Results | Export-Excel @ExcelParams
+
+        Write-Host "Exporting to Excel 2"
+        $ExcelParams.WorksheetName ="prg45"
+        $ExcelParams.TableName ="prg45Table"
+        $ExcelParams.PassThru = $true
+        $xls = $script:Results | Export-Excel  @ExcelParams 
+        
+        Write-Host "Tables: $xls.Workbook.Worksheets[1].Tables[1].Name"
+        $ws=$xls.Workbook.Worksheets[1]
+        $tbl = $ws.Tables[1]
+
+        Read-Host "Press Enter to continue"
+
+        Write-Host "Getting Conditional Formats"
+        #add conditional formatting (move section to a different function, just POC
+        foreach ( $node in $jsonFile.conditionalFormats ) {
+            #Write-HostAllObjects -JsonObject $node
+            Write-Host $node.FriendlyName
+            if ($node.Type -eq "ConstainsText") {
+                # $fillColor = FindClosestNamedColor $node.FillColor
+                # $fontColor = FindClosestNamedColor $node.FontColor
+                # write-host $fillColor
+                Add-ConditionalFormatting -Worksheet $xls.Workbook.Worksheets[1] -Address "A1:zz1048576" -ForegroundColor $node.FontColor -ConditionValue $node.ContainsTextSearch -RuleType ContainsText
+            }
+        }
+        Read-Host "Press Enter to continue"
+
+        Format-ExcelColumn -Worksheet $xls -ColumnName "ItemVersion" -Properties @("Bold", "FontSize18")
+
+        Read-Host "Press Enter to continue"
+
+        foreach ( $node in $jsonFile.columns ) {
+            Write-HostAllObjects -JsonObject $node
+             Write-Host $node.columnName
+
+            $xlParams = @{WorkSheet=$xls.Workbook.Worksheets[1]; Bold=$true; AutoSize=$true }
+
+            # if($node.horizontalAlignment -ne "") {$xlParams.horizontalAlignment = $true}
+            if($node.columnWidth -ne "") {$xlParams.width = $node.ColumnWidth}
+            if($node.indentLevel -ne "") {$xlParams.horizontalAlignment = $true}
+            # if($node.style -ne "") {$xlParams.horizontalAlignment = $true}
+            # if($node.numberFormat -ne "") {$xlParams.horizontalAlignment = $true}
+            # if($node.visible -ne "") {$xlParams.horizontalAlignment = $true}
+            # if($node.autosizeColumn -ne "") {$xlParams.horizontalAlignment = $true}
+            # if($node.horizontalAlignment -ne "") {$xlParams.horizontalAlignment = $true}
+
+            # Create the headings in the Excel worksheet
+        }
+        Set-ExcelRange -Range "CalendarLogRequestId"  -Value "Report Process" @xlParams
+        Set-ExcelRange -Range B2 -Value "Report Service" @xlParams
+        Set-ExcelRange -Range C2 -Value "Report Files"   @xlParams
+
+        Close-ExcelPackage $xls -Show
+    }
+
     return;
 }
 
@@ -1226,7 +1442,7 @@ if (Get-Command -Name Get-Mailbox -ErrorAction SilentlyContinue) {
     exit;
 }
 
-Write-Output "Checking for a valid mailbox..."
+Write-Host "Checking for a valid mailbox..."
 $script:MB = GetMailbox -Identity $Identity
 if ($null -eq $script:MB) {
     # -or $script:MB.GetType().FullName -ne "Microsoft.Exchange.Data.Directory.Management.Mailbox") {
@@ -1237,7 +1453,7 @@ if ($null -eq $script:MB) {
 }
 
 # Get initial CalLogs (saved in $script:InitialCDOs)
-Write-Output "Getting initial Calendar Logs..."
+Write-Host "Getting initial Calendar Logs..."
 GetCalendarDiagnosticObjects;
 
 $GlobalObjectIds = @();
