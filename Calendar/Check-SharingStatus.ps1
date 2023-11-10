@@ -10,12 +10,11 @@
 #
 # .EXAMPLE
 # Get-SharingStatus.ps1 -Owner Owner@contoso.com -Receiver Receiver@contoso.com
- 
 
 # Define the parameters
 [CmdletBinding()]
 param(
-    [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
+    [Parameter(Mandatory=$true)]
     [string]$Owner,
     [Parameter(Mandatory=$true)]
     [string]$Receiver
@@ -47,11 +46,11 @@ function ProcessCalendarSharingInviteLogs {
     param (
         [string]$Identity
     )
-    
+
     # Define the header row
     $header = "Timestamp", "Mailbox", "Entry MailboxOwner", "Recipient", "RecipientType", "SharingType", "DetailLevel"
     $csvString = @();
-    $csvString = $header -join "," 
+    $csvString = $header -join ","
     $csvString += "`n"
 
     Write-Output "------------------------"
@@ -62,8 +61,8 @@ function ProcessCalendarSharingInviteLogs {
         # Call the Export-MailboxDiagnosticLogs cmdlet and store the output in a variable
         # -ErrorAction is not supported on Export-MailboxDiagnosticLogs
         # $logOutput = Export-MailboxDiagnosticLogs $Identity -ComponentName CalendarSharingInvite -ErrorAction SilentlyContinue
-        
-        $logOutput = Export-MailboxDiagnosticLogs $Identity -ComponentName CalendarSharingInvite  
+
+        $logOutput = Export-MailboxDiagnosticLogs $Identity -ComponentName CalendarSharingInvite
     } catch {
         # Code to run if an error occurs
         Write-Error "An error occurred: $_"
@@ -127,7 +126,7 @@ function ProcessCalendarSharingAcceptLogs {
     # Define the header row
     $header = "Timestamp", "Mailbox", "SharedCalendarOwner", "FolderName"
     $csvString = @();
-    $csvString = $header -join "," 
+    $csvString = $header -join ","
     $csvString += "`n"
 
     Write-Output "------------------------"
@@ -138,8 +137,8 @@ function ProcessCalendarSharingAcceptLogs {
         # Call the Export-MailboxDiagnosticLogs cmdlet and store the output in a variable
         # -ErrorAction is not supported on Export-MailboxDiagnosticLogs
         # $logOutput = Export-MailboxDiagnosticLogs $Identity -ComponentName AcceptCalendarSharingInvite -ErrorAction SilentlyContinue
-        
-        $logOutput = Export-MailboxDiagnosticLogs $Identity -ComponentName AcceptCalendarSharingInvite  
+
+        $logOutput = Export-MailboxDiagnosticLogs $Identity -ComponentName AcceptCalendarSharingInvite
     } catch {
         # Code to run if an error occurs
         Write-Error "An error occurred: $_"
@@ -168,7 +167,7 @@ function ProcessCalendarSharingAcceptLogs {
     $csvString = $csvString.Replace("Entry CreateInternalSharedCalendarGroupEntry: ", "")
     $csvString = $csvString.Replace("Creating a shared calendar for ", "")
     $csvString = $csvString.Replace("calendar name ", "")
- 
+
     # Convert the CSV string to an object
     $csvObject = $csvString | ConvertFrom-Csv
 
@@ -201,7 +200,7 @@ function GetOwnerInformation {
     #Standard Owner information
     Write-Host -ForegroundColor DarkYellow "------------------------------------------------"
     Write-Host -ForegroundColor DarkYellow "Key Owner Mailbox Information:"
-    $script:OwnerMB = Get-Mailbox $Owner 
+    $script:OwnerMB = Get-Mailbox $Owner
     # Write-Host "`t DisplayName:" $script:OwnerMB.DisplayName
     # Write-Host "`t Database:" $script:OwnerMB.Database
     # Write-Host "`t ServerName:" $script:OwnerMB.ServerName
@@ -210,7 +209,7 @@ function GetOwnerInformation {
     # Write-Host "`t CalendarRepairDisabled:" $script:OwnerMB.CalendarRepairDisabled
     # Write-Host "`t RecipientTypeDetails:" $script:OwnerMB.RecipientTypeDetails
     # Write-Host "`t RecipientType:" $script:OwnerMB.RecipientType
-    Get-Mailbox $Owner | Format-List DisplayName, Database, ServerName, LitigationHoldEnabled, CalendarVersionStoreDisabled, CalendarRepairDisabled,  RecipientType*
+    Get-Mailbox $Owner | Format-List DisplayName, Database, ServerName, LitigationHoldEnabled, CalendarVersionStoreDisabled, CalendarRepairDisabled, RecipientType*
 
     if ($null -eq $script:OwnerMB) {
         Write-Host -ForegroundColor Red "Could not find Owner Mailbox [$Owner]."
@@ -230,7 +229,7 @@ function GetOwnerInformation {
     }
 
     Write-Host  -ForegroundColor DarkYellow  "Owner Calendar Folder Statistics:"
-    $OwnerCalendar = Get-MailboxFolderStatistics -Identity $Owner -FolderScope Calendar 
+    $OwnerCalendar = Get-MailboxFolderStatistics -Identity $Owner -FolderScope Calendar
     $OwnerCalendarName = ($OwnerCalendar | Where-Object FolderPath -EQ "/Calendar").Name
 
     Get-MailboxFolderStatistics -Identity $Owner -FolderScope Calendar | Format-Table -a FolderPath, ItemsInFolder, FolderAndSubfolderSize
@@ -245,7 +244,7 @@ function GetOwnerInformation {
     # Get-MailboxFolderStatistics -Identity $Owner -FolderScope RecoverableItems | Where-Object FolderPath -Like *Calendar* | Format-Table FolderPath, ItemsInFolder, FolderAndSubfolderSize
 
     Write-Host  -ForegroundColor DarkYellow "Owner Modern Sharing Sent Invites"
-    ProcessCalendarSharingInviteLogs -Identity $Owner   
+    ProcessCalendarSharingInviteLogs -Identity $Owner
 }
 
 <#
@@ -270,12 +269,12 @@ function GetReceiverInformation {
     $CalStats | Format-Table -a FolderPath, ItemsInFolder, FolderAndSubfolderSize
     $ReceiverCalendarName = ($CalStats | Where-Object FolderType -EQ "Calendar").Name
 
-    if ($CalStats | Where-Object Name -like $owner* ) {
+    if ($CalStats | Where-Object Name -Like $owner* ) {
         Write-Host -ForegroundColor Yellow "Looks like we might have found a copy of the Owner Calendar in the Receiver Calendar."
-        $CalStats | Where-Object Name -like $owner* | Format-Table -a FolderPath, ItemsInFolder, FolderAndSubfolderSize
-        if(($CalStats | Where-Object Name -like $owner*).count -gt 1) {
+        $CalStats | Where-Object Name -Like $owner* | Format-Table -a FolderPath, ItemsInFolder, FolderAndSubfolderSize
+        if (($CalStats | Where-Object Name -Like $owner*).count -gt 1) {
             Write-Host -ForegroundColor Yellow "Warning :Might have found more than one copy of the Owner Calendar in the Receiver Calendar."
-        }   
+        }
     } else {
         Write-Host -ForegroundColor Yellow "Warning: Could not Identify the Owner Calendar in the Receiver Calendar."
     }
@@ -291,7 +290,7 @@ function GetReceiverInformation {
     if (Get-Command -Name Get-CalendarEntries -ErrorAction SilentlyContinue) {
         Write-Verbose "Found Get-CalendarEntries cmdlet. Running cmdlet: Get-CalendarEntries -Identity $Receiver"
         # ToDo: Check each value for proper sharing permissions (i.e.  $X.CalendarSharingPermissionLevel -eq "ReadWrite" )
-        $ReceiverCalEntries = Get-CalendarEntries -Identity $Receiver 
+        $ReceiverCalEntries = Get-CalendarEntries -Identity $Receiver
         Write-Host "CalendarGroupName : $($ReceiverCalEntries.CalendarGroupName)"
         Write-Host "CalendarName : $($ReceiverCalEntries.CalendarName)"
         Write-Host "OwnerEmailAddress : $($ReceiverCalEntries.OwnerEmailAddress)"
@@ -301,9 +300,9 @@ function GetReceiverInformation {
         # need to check if Get-CalendarValidationResult in the PS Workspace
         if ((Get-Command -Name Get-CalendarValidationResult -ErrorAction SilentlyContinue) -and
             $null -ne $ReceiverCalEntries) {
-                Write-Host "Running cmdlet: Get-CalendarValidationResult -Version V2 -Identity $Receiver -SourceCalendarId $($ReceiverCalEntries[0].LocalFolderId) -TargetUserId $Owner -IncludeAnalysis 1 -OnlyReportErrors 1"
-                $ewsId_del= $ReceiverCalEntries[0].LocalFolderId
-                Get-CalendarValidationResult -Version V2 -Identity $Receiver -SourceCalendarId $ewsId_del -TargetUserId $Owner -IncludeAnalysis 1 -OnlyReportErrors 1
+            Write-Host "Running cmdlet: Get-CalendarValidationResult -Version V2 -Identity $Receiver -SourceCalendarId $($ReceiverCalEntries[0].LocalFolderId) -TargetUserId $Owner -IncludeAnalysis 1 -OnlyReportErrors 1"
+            $ewsId_del= $ReceiverCalEntries[0].LocalFolderId
+            Get-CalendarValidationResult -Version V2 -Identity $Receiver -SourceCalendarId $ewsId_del -TargetUserId $Owner -IncludeAnalysis 1 -OnlyReportErrors 1
         }
     }
 
@@ -312,9 +311,8 @@ function GetReceiverInformation {
         Write-Host "Running cmdlet:"
         Write-Host -NoNewline -ForegroundColor Yellow "Get-MailboxCalendarFolder -Identity ${Receiver}:\$ReceiverCalendarName\$($script:OwnerMB.DisplayName)"
         try {
-            Get-MailboxCalendarFolder -Identity "${Receiver}:\$ReceiverCalendarName\$($script:OwnerMB.DisplayName)" | Format-List Identity, CreationTime, ExtendedFolderFlags, ExtendedFolderFlags2, CalendarSharingFolderFlags, CalendarSharingOwnerSmtpAddress, CalendarSharingPermissionLevel, SharingLevelOfDetails, SharingPermissionFlags, LastAttemptedSyncTime, LastSuccessfulSyncTime, SharedCalendarSyncStartDate            
-        }
-        catch {
+            Get-MailboxCalendarFolder -Identity "${Receiver}:\$ReceiverCalendarName\$($script:OwnerMB.DisplayName)" | Format-List Identity, CreationTime, ExtendedFolderFlags, ExtendedFolderFlags2, CalendarSharingFolderFlags, CalendarSharingOwnerSmtpAddress, CalendarSharingPermissionLevel, SharingLevelOfDetails, SharingPermissionFlags, LastAttemptedSyncTime, LastSuccessfulSyncTime, SharedCalendarSyncStartDate
+        } catch {
             Write-Error "Failed to get the Owner Calendar from the Receiver Mailbox.  This is fine if not using Modern Sharing."
         }
     } else {
