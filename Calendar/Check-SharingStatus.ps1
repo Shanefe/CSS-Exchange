@@ -9,7 +9,7 @@
 #  Receiver of the shared mailbox, often the Delegate.
 #
 # .EXAMPLE
-# Get-SharingStatus.ps1 -Owner Owner@contoso.com -Receiver Receiver@contoso.com
+# Check-SharingStatus.ps1 -Owner Owner@contoso.com -Receiver Receiver@contoso.com
 
 # Define the parameters
 [CmdletBinding()]
