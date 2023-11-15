@@ -364,12 +364,9 @@ function CheckObjects {
 
                 #PrimarySMTP
                 Write-Verbose -Message "Informational: Checking if the PrimarySTMPAddress of TARGET belongs to a TARGET accepted domain"
-                if ($TargetTenantAcceptedDomains.DomainName -contains $TargetObject.PrimarySmtpAddress.Split('@')[1]) {
-                    Write-Host ">> Target MailUser PrimarySMTPAddress is part of target accepted domains" -ForegroundColor Green
-                } else {
-                    Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant" -ForegroundColor Red -NoNewline
+                if ($TargetTenantAcceptedDomains.DomainName -notcontains $TargetObject.PrimarySmtpAddress.Split('@')[1]) {
                     if (!$TargetObject.IsDirSynced) {
-                        Write-Host ">> would you like to set it to $($TargetObject.UserPrincipalName) (Y/N): " -ForegroundColor Red -NoNewline
+                        Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant, would you like to set it to $($TargetObject.UserPrincipalName) (Y/N): " -ForegroundColor Red -NoNewline
                         $PrimarySMTPAddressSetOption = Read-Host
                         Write-Host " Your input: $($PrimarySMTPAddressSetOption)"
                         if ($PrimarySMTPAddressSetOption.ToLower() -eq "y") {
@@ -381,15 +378,15 @@ function CheckObjects {
                     } else {
                         Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant. The object is DirSynced and this is not a change that can be done directly on EXO. Please do the change on-premises and perform an AADConnect delta sync" -ForegroundColor Red
                     }
+                } else {
+                    Write-Host ">> Target MailUser PrimarySMTPAddress is part of target accepted domains" -ForegroundColor Green
                 }
 
                 #EMailAddresses
                 Write-Verbose -Message "Informational: Checking for EmailAddresses on TARGET object that are not on the TARGET accepted domains list"
                 foreach ($Address in $TargetObject.EmailAddresses) {
                     if ($Address.StartsWith("SMTP:") -or $Address.StartsWith("smtp:")) {
-                        if ($TargetTenantAcceptedDomains.DomainName -contains $Address.Split("@")[1]) {
-                            Write-Host ">> EmailAddress $($Address) is part of the target accepted domains" -ForegroundColor Green
-                        } else {
+                        if ($TargetTenantAcceptedDomains.DomainName -notcontains $Address.Split("@")[1]) {
                             if (!$TargetObject.IsDirSynced) {
                                 Write-Host ">> Error: $($Address) is not part of your organization, would you like to remove it? (Y/N): " -ForegroundColor Red -NoNewline
                                 $RemoveAddressOption = Read-Host
@@ -404,6 +401,8 @@ function CheckObjects {
                                 Write-Host ">> Error: $($Address) is not part of your organization. The object is DirSynced and this is not a change that can be done directly on EXO. Please do remove the address from on-premises and perform an AADConnect delta sync" -ForegroundColor Red
                             }
                         }
+                    } else {
+                        Write-Host ">> Target MailUser ProxyAddresses are all part of the target organization" -ForegroundColor Green
                     }
                 }
 
@@ -412,9 +411,7 @@ function CheckObjects {
                 if ($SourceObject.EmailAddresses -like '*500:*') {
                     Write-Verbose -Message "SOURCE mailbox contains X500 addresses, checking if they're present on the TARGET MailUser"
                     foreach ($Address in ($SourceObject.EmailAddresses | Where-Object { $_ -like '*500:*' })) {
-                        if ($TargetObject.EmailAddresses -contains $Address) {
-                            Write-Verbose -Message "Informational: The X500 address $($Address) from SOURCE object is present on TARGET object"
-                        } else {
+                        if ($TargetObject.EmailAddresses -notcontains $Address) {
                             if (!$TargetObject.IsDirSynced) {
                                 Write-Host ">> Error: $($Address) is not present on the TARGET MailUser, would you like to add it? (Y/N): " -ForegroundColor Red -NoNewline
                                 $AddX500 = Read-Host
@@ -428,6 +425,8 @@ function CheckObjects {
                             } else {
                                 Write-Host ">> Error: $($Address) is not present on the TARGET MailUser and the object is DirSynced. This is not a change that can be done directly on EXO, please add the X500 address from on-premises and perform an AADConnect delta sync" -ForegroundColor Red
                             }
+                        } else {
+                            Write-Host ">> Informational: The X500 address from SOURCE object is present on TARGET object" -ForegroundColor Green
                         }
                     }
                 } else {
@@ -652,12 +651,9 @@ function CheckObjectsSourceOffline {
 
                 #PrimarySMTP
                 Write-Verbose -Message "Informational: Checking if the PrimarySTMPAddress of TARGET belongs to a TARGET accepted domain"
-                if ($TargetTenantAcceptedDomains.DomainName -contains $TargetObject.PrimarySmtpAddress.Split('@')[1]) {
-                    Write-Host ">> Target MailUser PrimarySMTPAddress is part of target accepted domains" -ForegroundColor Green
-                } else {
-                    Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant" -ForegroundColor Red -NoNewline
+                if ($TargetTenantAcceptedDomains.DomainName -notcontains $TargetObject.PrimarySmtpAddress.Split('@')[1]) {
                     if (!$TargetObject.IsDirSynced) {
-                        Write-Host ">> would you like to set it to $($TargetObject.UserPrincipalName) (Y/N): " -ForegroundColor Red -NoNewline
+                        Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant, would you like to set it to $($TargetObject.UserPrincipalName) (Y/N): " -ForegroundColor Red -NoNewline
                         $PrimarySMTPAddressSetOption = Read-Host
                         Write-Host " Your input: $($PrimarySMTPAddressSetOption)"
                         if ($PrimarySMTPAddressSetOption.ToLower() -eq "y") {
@@ -667,17 +663,17 @@ function CheckObjectsSourceOffline {
                             $TargetObject = Get-TargetMailUser $TargetIdentity
                         }
                     } else {
-                        Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant. The object is DirSynced and this is not a change that can be done directly on EXO. Please do the change on-premises and perform an AADConnect delta sync" -ForegroundColor Red
+                        Write-Host ">> Error: The Primary SMTP address $($TargetObject.PrimarySmtpAddress) of the MailUser does not belong to an accepted domain on the target tenant. The object is DirSynced and this is not a change that can be done directly on EXO, please do the change on-premises and perform an AADConnect delta sync" -ForegroundColor Red
                     }
+                } else {
+                    Write-Host ">> Target MailUser PrimarySMTPAddress is part of target accepted domains" -ForegroundColor Green
                 }
 
                 #EMailAddresses
                 Write-Verbose -Message "Informational: Checking for EmailAddresses on TARGET object that are not on the TARGET accepted domains list"
                 foreach ($Address in $TargetObject.EmailAddresses) {
                     if ($Address.StartsWith("SMTP:") -or $Address.StartsWith("smtp:")) {
-                        if ($TargetTenantAcceptedDomains.DomainName -contains $Address.Split("@")[1]) {
-                            Write-Host ">> EmailAddress $($Address) is part of the target accepted domains" -ForegroundColor Green
-                        } else {
+                        if ($TargetTenantAcceptedDomains.DomainName -notcontains $Address.Split("@")[1]) {
                             if (!$TargetObject.IsDirSynced) {
                                 Write-Host ">> Error: $($Address) is not part of your organization, would you like to remove it? (Y/N): " -ForegroundColor Red -NoNewline
                                 $RemoveAddressOption = Read-Host
@@ -689,9 +685,11 @@ function CheckObjectsSourceOffline {
                                     $TargetObject = Get-TargetMailUser $TargetIdentity
                                 }
                             } else {
-                                Write-Host ">> Error: $($Address) is not part of your organization. The object is DirSynced and this is not a change that can be done directly on EXO. Please do remove the address from on-premises and perform an AADConnect delta sync" -ForegroundColor Red
+                                Write-Host ">> Error: $($Address) is not part of your organization. The object is DirSynced and this is not a change that can be done directly on EXO, please remove the address from on-premises and perform an AADConnect delta sync" -ForegroundColor Red
                             }
                         }
+                    } else {
+                        Write-Host ">> Target MailUser ProxyAddresses are all part of the target organization" -ForegroundColor Green
                     }
                 }
 
@@ -700,9 +698,7 @@ function CheckObjectsSourceOffline {
                 if ($SourceObject.EmailAddresses -like '*500:*') {
                     Write-Verbose -Message "SOURCE mailbox contains X500 addresses, checking if they're present on the TARGET MailUser"
                     foreach ($Address in ($SourceObject.EmailAddresses | Where-Object { $_ -like '*500:*' })) {
-                        if ($TargetObject.EmailAddresses -contains $Address) {
-                            Write-Verbose -Message "Informational: The X500 address $($Address) from SOURCE object is present on TARGET object"
-                        } else {
+                        if ($TargetObject.EmailAddresses -notcontains $Address) {
                             if (!$TargetObject.IsDirSynced) {
                                 Write-Host ">> Error: $($Address) is not present on the TARGET MailUser, would you like to add it? (Y/N): " -ForegroundColor Red -NoNewline
                                 $AddX500 = Read-Host
@@ -714,8 +710,10 @@ function CheckObjectsSourceOffline {
                                     $TargetObject = Get-TargetMailUser $TargetIdentity
                                 }
                             } else {
-                                Write-Host ">> Error: $($Address) is not present on the TARGET MailUser and the object is DirSynced. This is not a change that can be done directly on EXO, please add the X500 address from on-premises and perform an AADConnect delta sync" -ForegroundColor Red
+                                Write-Host ">> Error: $($Address) is not present on the TARGET MailUser. The object is DirSynced and this is not a change that can be done directly on EXO, please add the address on-premises and perform an AADConnect delta sync" -ForegroundColor Red
                             }
+                        } else {
+                            Write-Host ">> Informational: The X500 address from SOURCE object is present on TARGET object" -ForegroundColor Green
                         }
                     }
                 } else {
