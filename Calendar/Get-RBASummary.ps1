@@ -479,7 +479,7 @@ function RBAPostScript {
     Write-Host;
     Write-Host "To continue troubleshooting further, suggestion is to create a Test Meeting in this room (in the future, RBA does not process meeting in the past).";
     Write-Host "and then pull the RBA Logs as well as the Calendar Diagnostic Objects to see how the system processed the meeting request.";
-    Write-host "For Calendar Diagnostic Objects, try [CalLogSummaryScript](https://github.com/microsoft/CSS-Exchange/releases/latest/download/Get-CalendarDiagnosticObjectsSummary.ps1)"
+    Write-Host "For Calendar Diagnostic Objects, try [CalLogSummaryScript](https://github.com/microsoft/CSS-Exchange/releases/latest/download/Get-CalendarDiagnosticObjectsSummary.ps1)"
 
     Write-Host "`n`rIf you found an error with this script or a misconfigured RBA case that this should cover,
          send mail to Shanefe@microsoft.com";
@@ -501,7 +501,7 @@ function RBALogSummary {
             Write-Host "`tThe RBA Log for [$Identity] shows the following:"
             Write-Host "`t $($starts.count) Processed events times between $FirstDate and $LastDate"
         }
-        
+
         $AcceptLogs = $RBALog | Select-String -Pattern "Action:Accept"
         $DeclineLogs = $RBALog | Select-String -Pattern "Action:Decline"
         $TentativeLogs = $RBALog | Select-String -Pattern "Action:Tentative"
@@ -541,7 +541,7 @@ function RBALogSummary {
             Write-Host -ForegroundColor Red "`t No meetings were updated in the RBA Log."
         }
 
-        if($Cancellations.count -ne 0) {
+        if ($Cancellations.count -ne 0) {
             Write-Host "`t $($Cancellations.count) Cancellations were processed."
         } else {
             Write-Host "`t No meetings were canceled in the RBA Log."
@@ -564,10 +564,9 @@ function RBALogSummary {
         }
 
         if ($SkippedExternal.count -ne 0) {
-            if($SkippedExternal.Count -lt 3) {
-            Write-Host "`t Warning: $($SkippedExternal.count) External meetings were skipped as processing external items is false."
-            }
-            else {
+            if ($SkippedExternal.Count -lt 3) {
+                Write-Host "`t Warning: $($SkippedExternal.count) External meetings were skipped as processing external items is false."
+            } else {
                 Write-Host -ForegroundColor Red "`t Warning: $($SkippedExternal.count) External meetings were skipped as processing external items is false."
                 Write-Host -ForegroundColor Red "`t`t Many skipped external meetings may indicate a configuration issue in Transport."
                 Write-Host -ForegroundColor Red "`t`t Validate that Internal Meetings are not getting marked as External."
@@ -577,7 +576,6 @@ function RBALogSummary {
         $Filename = "RBA-Logs_$($Identity.Split('@')[0])_$((Get-Date).ToString('yyyy-MM-dd_HH-mm-ss')).txt"
         Write-Host "`r`n`t RBA Logs saved as [$Filename] in the current directory."
         $RBALog | Out-File $Filename
-
     } else {
         Write-Warning "No RBA Logs found.  Send a test meeting invite to the room and try again if this is a newly created room mailbox."
     }
