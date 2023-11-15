@@ -472,10 +472,15 @@ function VerbosePostProcessing {
 #Add information about RBA logs.
 function RBAPostScript {
     Write-Host;
-    Write-Host "If more information is needed about this resource mailbox, please look at the RBA logs to
+    Write-Host "If more information is needed about this resource mailbox, please look at the RBA logs saved in this directory to
         see how the system proceed the meeting request.";
+    Write-Host "To get new RBA Logs, run the following command:"
     Write-Host -ForegroundColor Yellow "`tExport-MailboxDiagnosticLogs $Identity -ComponentName RBA";
     Write-Host;
+    Write-Host "To continue troubleshooting further, suggestion is to create a Test Meeting in this room (in the future, RBA does not process meeting in the past).";
+    Write-Host "and then pull the RBA Logs as well as the Calendar Diagnostic Objects to see how the system processed the meeting request.";
+    Write-Host "For Calendar Diagnostic Objects, try [CalLogSummaryScript](https://github.com/microsoft/CSS-Exchange/releases/latest/download/Get-CalendarDiagnosticObjectsSummary.ps1)"
+
     Write-Host "`n`rIf you found an error with this script or a misconfigured RBA case that this should cover,
          send mail to Shanefe@microsoft.com";
 }
@@ -493,13 +498,18 @@ function RBALogSummary {
         if ($starts.count -gt 1) {
             $LastDate = ($Starts[0] -Split ",")[0].Trim()
             $FirstDate = ($starts[$($Starts.count) -1 ] -Split ",")[0].Trim();
-            Write-Host "The RBA Log for $Identity shows the following:"
+            Write-Host "`tThe RBA Log for [$Identity] shows the following:"
             Write-Host "`t $($starts.count) Processed events times between $FirstDate and $LastDate"
         }
 
         $AcceptLogs = $RBALog | Select-String -Pattern "Action:Accept"
         $DeclineLogs = $RBALog | Select-String -Pattern "Action:Decline"
         $TentativeLogs = $RBALog | Select-String -Pattern "Action:Tentative"
+        $UpdatedLogs = $RBALog | Select-String -Pattern "Begin ProcessUpdateRequest"
+        $SkippedExternal = $RBALog | Select-String -Pattern "Skipping processing because user settings for processing external items is false."
+        $DelegateReferrals = $RBALog | Select-String -Pattern "Forwarding Request To Delegates"
+        $NonMeetingRequests = $RBALog | Select-String -Pattern "Item is not a meeting request"
+        $Cancellations = $RBALog | Select-String -Pattern "It's a meeting cancellation."
 
         if ($AcceptLogs.count -ne 0) {
             $LastAccept = ($AcceptLogs[0] -Split ",")[0].Trim()
@@ -522,6 +532,50 @@ function RBALogSummary {
         if ($AcceptLogs.count -eq 0 -and $TentativeLogs.count -eq 0 -and $DeclineLogs.count -eq 0) {
             Write-Host -ForegroundColor Red "`t No meetings were processed in the RBA Log."
         }
+
+        if ($UpdatedLogs.count -ne 0) {
+            $LastUpdated = ($UpdatedLogs[0] -Split ",")[0].Trim()
+            Write-Host "`t $($UpdatedLogs.count) Updates to meetings between $FirstDate and $LastDate"
+            Write-Host "`t`t with the last meeting updated on $LastUpdated"
+        } else {
+            Write-Host -ForegroundColor Red "`t No meetings were updated in the RBA Log."
+        }
+
+        if ($Cancellations.count -ne 0) {
+            Write-Host "`t $($Cancellations.count) Cancellations were processed."
+        } else {
+            Write-Host "`t No meetings were canceled in the RBA Log."
+        }
+
+        if ($DelegateReferrals.count -ne 0) {
+            $LastDelegateReferral = ($DelegateReferrals[0] -Split ",")[0].Trim()
+            Write-Host "`t $($DelegateReferrals.count) Delegate Referrals were sent between $FirstDate and $LastDate"
+            Write-Host "`t`t with the last Delegate Referral sent on $LastDelegateReferral"
+        } else {
+            Write-Host "`t No Delegate Referrals were sent in the RBA Log."
+        }
+
+        if ($NonMeetingRequests.count -ne 0) {
+            $LastNonMeetingRequest = ($NonMeetingRequests[0] -Split ",")[0].Trim()
+            Write-Host "`t $($NonMeetingRequests.count) Non Meeting Requests were skipped between $FirstDate and $LastDate"
+            Write-Host "`t`t with the last Non Meeting Request skipped on $LastNonMeetingRequest"
+        } else {
+            Write-Host "`t No Non Meeting Requests were skipped in the RBA Log."
+        }
+
+        if ($SkippedExternal.count -ne 0) {
+            if ($SkippedExternal.Count -lt 3) {
+                Write-Host "`t Warning: $($SkippedExternal.count) External meetings were skipped as processing external items is false."
+            } else {
+                Write-Host -ForegroundColor Red "`t Warning: $($SkippedExternal.count) External meetings were skipped as processing external items is false."
+                Write-Host -ForegroundColor Red "`t`t Many skipped external meetings may indicate a configuration issue in Transport."
+                Write-Host -ForegroundColor Red "`t`t Validate that Internal Meetings are not getting marked as External."
+            }
+        }
+
+        $Filename = "RBA-Logs_$($Identity.Split('@')[0])_$((Get-Date).ToString('yyyy-MM-dd_HH-mm-ss')).txt"
+        Write-Host "`r`n`t RBA Logs saved as [$Filename] in the current directory."
+        $RBALog | Out-File $Filename
     } else {
         Write-Warning "No RBA Logs found.  Send a test meeting invite to the room and try again if this is a newly created room mailbox."
     }
@@ -622,19 +676,6 @@ function ValidateRoomListSettings {
     Write-Host
 }
 
-function Get-DashLine {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [int]$Length,
-        [char] $DashChar = "-"
-    )
-    $dashLine = [string]::Empty
-    1..$Length | ForEach-Object { $dashLine += $DashChar }
-    return $dashLine
-}
-
 function Write-DashLineBoxColor {
     [CmdletBinding()]
     param(
@@ -652,7 +693,8 @@ function Write-DashLineBoxColor {
     #>
     $highLineLength = 0
     $Line | ForEach-Object { if ($_.Length -gt $highLineLength) { $highLineLength = $_.Length } }
-    $dashLine = Get-DashLine $highLineLength -DashChar $DashChar
+    $dashLine = [string]::Empty
+    1..$highLineLength | ForEach-Object { $dashLine += $DashChar }
     Write-Host
     Write-Host -ForegroundColor $Color $dashLine
     $Line | ForEach-Object { Write-Host -ForegroundColor $Color $_ }
